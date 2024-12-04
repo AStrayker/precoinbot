@@ -3,7 +3,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from telegram.ext import filters  # В новой версии Filters теперь импортируются так
 
 # ID авторизованных пользователей
-AUTHORIZED_USERS = set(282198872)  # сюда будут добавляться ID авторизованных пользователей, например, {282198872}
+AUTHORIZED_USERS = {282198872}  # Добавлен ваш ID пользователя
 
 # Определяем этапы диалога
 CHOOSING, PHOTO, TEXT, CONFIRM = range(4)
