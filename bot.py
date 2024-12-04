@@ -68,7 +68,7 @@ def review_post(update: Update, context: CallbackContext) -> int:
 
 # Отправка поста
 def send_post(update: Update, context: CallbackContext) -> int:
-    channel_id = '@your_channel'  # Ваш канал
+    channel_id = '@precoinmarket_channel'  # Ваш канал
     image = context.user_data.get('image')
     text = context.user_data.get('text', '')
     
@@ -91,7 +91,7 @@ def cancel(update: Update, context: CallbackContext) -> int:
 def main():
     persistence = PicklePersistence('bot_data')  # Сохранение состояния
 
-    updater = Updater("YOUR_BOT_TOKEN", persistence=persistence, use_context=True)
+    updater = Updater("7728310907:AAFNSOGBWupK6RCXuf0YRA26ex69hTycS5I", persistence=persistence, use_context=True)
     
     dp = updater.dispatcher
 
