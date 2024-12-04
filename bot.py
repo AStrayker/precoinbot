@@ -1,4 +1,4 @@
-from telegram import Update, InputMediaPhoto
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, CallbackContext
 from telegram.ext import filters  # В новой версии Filters теперь импортируются так
 
