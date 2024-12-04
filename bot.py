@@ -1,5 +1,6 @@
 import os
-from telegram import Update, InputMediaPhoto, ParseMode
+from telegram import Update, InputMediaPhoto
+from telegram.constants import ParseMode
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler, ConversationHandler, CallbackContext
 
 # ID авторизованных пользователей
