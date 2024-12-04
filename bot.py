@@ -1,7 +1,7 @@
 import os
 from telegram import Update, InputMediaPhoto
-from telegram.constants import ParseMode
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler, ConversationHandler, CallbackContext
+from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, CallbackContext
+from telegram.ext import filters  # Импортируем filters из нового модуля
 
 # ID авторизованных пользователей
 AUTHORIZED_USERS = set()  # сюда будут добавляться ID авторизованных пользователей, например, {123456789}
@@ -62,11 +62,11 @@ def send_post(update: Update, context: CallbackContext):
         additional_text = file.read()
 
     # Здесь отправляется сообщение в канал
-    channel_id = "@@precoinmarket_channel"
+    channel_id = "@PreCoinMarket"
     context.bot.send_message(
         channel_id,
         text + "\n\n" + additional_text,
-        parse_mode=ParseMode.MARKDOWN
+        parse_mode="Markdown"
     )
     update.callback_query.edit_message_text("Публикация успешна!")
     return ConversationHandler.END
@@ -83,8 +83,8 @@ def main():
         entry_points=[CommandHandler('start', start)],
         states={
             CHOOSING: [CallbackQueryHandler(choose_option)],
-            PHOTO: [MessageHandler(Filters.photo | Filters.text, photo)],
-            TEXT: [MessageHandler(Filters.text & ~Filters.command, text)],
+            PHOTO: [MessageHandler(filters.PHOTO | filters.TEXT, photo)],  # Применяем новый способ импорта фильтров
+            TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, text)],
             CONFIRM: [CallbackQueryHandler(send_post, pattern='send'),
                       CallbackQueryHandler(cancel, pattern='cancel')],
         },
