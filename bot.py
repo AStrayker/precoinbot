@@ -16,7 +16,7 @@ async def start(update: Update, context: CallbackContext):
 
     await update.message.reply_text(
         "Выберите тип публикации:",
-        reply_markup=InlineKeyboardMarkup([
+        reply_markup=InlineKeyboardMarkup([ 
             [InlineKeyboardButton("Создать публикацию", callback_data='create')],
             [InlineKeyboardButton("Запланировать публикацию", callback_data='schedule')],
         ])
@@ -45,23 +45,28 @@ async def text(update: Update, context: CallbackContext):
     user_text = update.message.text
     context.user_data['text'] = user_text
 
+    # Создание кнопок для подтверждения публикации
     await update.message.reply_text("Подтвердите публикацию: \n\n" + user_text,
-                              reply_markup=InlineKeyboardMarkup([
-                                  [InlineKeyboardButton("Отправить", callback_data='send')],
-                                  [InlineKeyboardButton("Отменить", callback_data='cancel')]
-                              ]))
+                                    reply_markup=InlineKeyboardMarkup([
+                                        [InlineKeyboardButton("Отправить", callback_data='send')],
+                                        [InlineKeyboardButton("Отменить", callback_data='cancel')]
+                                    ]))
     return CONFIRM
 
 async def send_post(update: Update, context: CallbackContext):
     user_data = context.user_data
     text = user_data.get('text', '')
-    
+
     # Текст из файла
-    with open('additional_text.txt', 'r') as file:
-        additional_text = file.read()
+    try:
+        with open('additional_text.txt', 'r') as file:
+            additional_text = file.read()
+    except FileNotFoundError:
+        await update.callback_query.edit_message_text("Ошибка: файл дополнительного текста не найден.")
+        return ConversationHandler.END
 
     # Здесь отправляется сообщение в канал
-    channel_id = "@PreCoinMarket"
+    channel_id = "@PreCoinMarket"  # Замените на свой канал
     await context.bot.send_message(
         channel_id,
         text + "\n\n" + additional_text,
@@ -82,7 +87,7 @@ def main():
         entry_points=[CommandHandler('start', start)],
         states={
             CHOOSING: [CallbackQueryHandler(choose_option)],
-            PHOTO: [MessageHandler(filters.PHOTO | filters.TEXT, photo)],  # Применяем новый способ импорта фильтров
+            PHOTO: [MessageHandler(filters.PHOTO | filters.TEXT, photo)],
             TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, text)],
             CONFIRM: [CallbackQueryHandler(send_post, pattern='send'),
                       CallbackQueryHandler(cancel, pattern='cancel')],
