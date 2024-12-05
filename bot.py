@@ -85,14 +85,19 @@ async def cancel(update: Update, context: CallbackContext):
     await update.callback_query.edit_message_text("Публикация отменена.")
     return ConversationHandler.END
 
+# Функция для обработки кнопок "Отправить" и "Отменить"
 async def confirm_button(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
+
+    print(f"Получен запрос от кнопки: {query.data}")  # Добавим отладочный вывод для отслеживания
 
     if query.data == 'send':
         await send_post(update, context)
     elif query.data == 'cancel':
         await cancel(update, context)
+    else:
+        await query.edit_message_text("Неизвестная команда.")
 
 def main():
     application = Application.builder().token("7728310907:AAFNSOGBWupK6RCXuf0YRA26ex69hTycS5I").build()
