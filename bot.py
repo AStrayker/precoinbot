@@ -66,7 +66,7 @@ async def send_post(update: Update, context: CallbackContext):
         return ConversationHandler.END
 
     # Здесь отправляется сообщение в канал
-    channel_id = "@PreCoinMarket"  # Замените на свой канал
+    channel_id = "@precoinmarket_channel"  # Замените на свой канал
     await context.bot.send_message(
         channel_id,
         text + "\n\n" + additional_text,
