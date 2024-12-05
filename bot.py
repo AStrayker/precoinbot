@@ -1,13 +1,14 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, CallbackContext
-from telegram.ext import filters  # В новой версии Filters теперь импортируются так
+from telegram.ext import filters
 
 # ID авторизованных пользователей
-AUTHORIZED_USERS = {282198872}  # Добавлен ваш ID пользователя
+AUTHORIZED_USERS = {282198872}  # Ваш ID
 
 # Определяем этапы диалога
 CHOOSING, PHOTO, TEXT, CONFIRM = range(4)
 
+# Функция старта
 async def start(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     if user_id not in AUTHORIZED_USERS:
@@ -23,6 +24,7 @@ async def start(update: Update, context: CallbackContext):
     )
     return CHOOSING
 
+# Выбор опции
 async def choose_option(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
@@ -35,8 +37,8 @@ async def choose_option(update: Update, context: CallbackContext):
         await query.edit_message_text("Запланированная публикация еще не реализована.")
         return ConversationHandler.END
 
+# Обработка фото
 async def photo(update: Update, context: CallbackContext):
-    # Проверяем, что это изображение, и отправляем запрос на текст
     if update.message.photo:
         await update.message.reply_text(
             "Теперь напишите или вставьте текст публикации (или пропустите):"
@@ -46,6 +48,7 @@ async def photo(update: Update, context: CallbackContext):
         await update.message.reply_text("Пожалуйста, отправьте картинку.")
         return PHOTO
 
+# Обработка текста
 async def text(update: Update, context: CallbackContext):
     user_text = update.message.text
     context.user_data['text'] = user_text  # Сохраняем текст публикации
@@ -59,19 +62,20 @@ async def text(update: Update, context: CallbackContext):
     )
     return CONFIRM
 
+# Отправка поста
 async def send_post(update: Update, context: CallbackContext):
     user_data = context.user_data
     text = user_data.get('text', '')
 
-    # Попробуем открыть файл и обработать возможную ошибку
+    # Чтение дополнительного текста из файла
     try:
         with open('additional_text.txt', 'r') as file:
             additional_text = file.read()
     except FileNotFoundError:
-        await update.callback_query.edit_message_text("Ошибка: файл дополнительного текста не найден. Пожалуйста, убедитесь, что файл 'additional_text.txt' существует.")
+        await update.callback_query.edit_message_text("Ошибка: файл дополнительного текста не найден.")
         return ConversationHandler.END
 
-    # Здесь отправляется сообщение в канал
+    # Отправляем сообщение в канал
     channel_id = "@precoinmarket_channel"  # Ваш канал
     await context.bot.send_message(
         channel_id,
@@ -81,6 +85,7 @@ async def send_post(update: Update, context: CallbackContext):
     await update.callback_query.edit_message_text("Публикация успешна!")
     return ConversationHandler.END
 
+# Отмена публикации
 async def cancel(update: Update, context: CallbackContext):
     await update.callback_query.edit_message_text("Публикация отменена.")
     return ConversationHandler.END
@@ -90,8 +95,6 @@ async def confirm_button(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
 
-    print(f"Получен запрос от кнопки: {query.data}")  # Добавим отладочный вывод для отслеживания
-
     if query.data == 'send':
         await send_post(update, context)
     elif query.data == 'cancel':
@@ -99,7 +102,9 @@ async def confirm_button(update: Update, context: CallbackContext):
     else:
         await query.edit_message_text("Неизвестная команда.")
 
+# Главная функция
 def main():
+    # Подключаем бота
     application = Application.builder().token("7728310907:AAFNSOGBWupK6RCXuf0YRA26ex69hTycS5I").build()
 
     # Обработчики
