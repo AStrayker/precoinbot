@@ -1,199 +1,162 @@
 import logging
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from aiogram.utils import executor
-from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.dispatcher import FSMContext
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from telegram import Update, InputMediaPhoto
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext, CallbackQueryHandler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-# Telegram токен
-API_TOKEN = 'YOUR_BOT_TOKEN'
-CHANNEL_ID = '@precoinmarket_channel'
-
-# Настройка логгирования
+# Включаем логирование для отладки
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Инициализация бота и диспетчера
-bot = Bot(token=API_TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
+# Состояния диалога
+CHOOSE_ACTION, ADD_IMAGE, ADD_TEXT, CONFIRM = range(4)
 
-# FSM (состояния)
-class OrderState(StatesGroup):
-    choosing_quantity = State()
-    choosing_status = State()
-
-# Временное хранилище данных пользователей
+# Хранилище данных
 user_data = {}
 
-# Общая функция для отправки сообщения с клавиатурой
-async def send_message_with_keyboard(user_id, text, keyboard):
-    try:
-        await bot.send_message(user_id, text, reply_markup=keyboard)
-    except Exception as e:
-        logger.error(f"Ошибка отправки сообщения: {e}")
+# Текст из отдельного файла (например, "additional_text.txt")
+with open('additional_text.txt', 'r') as file:
+    additional_text = file.read()
 
-# Шаг 1: Начало сценария
-@dp.message_handler(commands=['start'])
-async def start_handler(message: types.Message):
-    user_data[message.from_user.id] = {}  # Очищаем данные перед началом нового сценария
-    keyboard = InlineKeyboardMarkup(row_width=2).add(
-        InlineKeyboardButton("🚛Автомобилем", callback_data="transport_auto"),
-        InlineKeyboardButton("🚂Вагонами", callback_data="transport_train")
-    )
-    await send_message_with_keyboard(message.from_user.id, "Выберите способ транспортировки:", keyboard)
+# Стартовая команда
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("Привет! Выберите тип публикации:", reply_markup=main_menu())
 
-# Шаг 2: Выбор способа транспортировки
-@dp.callback_query_handler(lambda c: c.data.startswith('transport'))
-async def transport_handler(callback_query: CallbackQuery):
-    user_id = callback_query.from_user.id
-    transport_type = "🚛Автомобилем" if callback_query.data == "transport_auto" else "🚂Вагонами"
-    user_data[user_id]['transport'] = transport_type
-
-    cargo_options = [
-        "Песок", "Цемент М500", "Цемент М400", "Щебень 5x10",
-        "Щебень 5x20", "Щебень 10x20", "Щебень 20x40", "Металлопрокат"
+# Главное меню
+def main_menu():
+    keyboard = [
+        [InlineKeyboardButton("Создать публикацию", callback_data='create_post')]
     ]
-    keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.add(*(InlineKeyboardButton(cargo, callback_data=f"cargo_{cargo}") for cargo in cargo_options))
+    return InlineKeyboardMarkup(keyboard)
 
-    await send_message_with_keyboard(user_id, "Выберите груз:", keyboard)
+# Обработчик команды "Создать публикацию"
+def choose_action(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
 
-# Шаг 3: Выбор груза
-@dp.callback_query_handler(lambda c: c.data.startswith('cargo'))
-async def cargo_handler(callback_query: CallbackQuery):
-    user_id = callback_query.from_user.id
-    cargo = callback_query.data.split('_')[1]
-    user_data[user_id]['cargo'] = cargo
+    user_data[query.from_user.id] = {}  # Инициализируем пустой словарь для данных пользователя
 
-    if cargo == "Металлопрокат":
-        keyboard = InlineKeyboardMarkup(row_width=2).add(
-            InlineKeyboardButton("Проволока", callback_data="metal_provoloka"),
-            InlineKeyboardButton("Металлопрокат", callback_data="metal_metal")
-        )
-        await send_message_with_keyboard(user_id, "Уточните тип металлопроката:", keyboard)
+    # Переход к следующему шагу
+    query.edit_message_text("Прикрепите или вставьте картинку:", reply_markup=skip_or_upload_image())
+
+# Кнопки для загрузки картинки или пропуска
+def skip_or_upload_image():
+    keyboard = [
+        [InlineKeyboardButton("Пропустить", callback_data='skip_image')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+# Обработка прикрепления картинки или пропуска
+def handle_image(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+
+    if query.data == 'skip_image':
+        user_data[query.from_user.id]['image'] = None
     else:
-        await choose_sender(user_id)
+        user_data[query.from_user.id]['image'] = update.message.photo[-1].file_id
 
-# Шаг 3.1: Тип металлопроката
-@dp.callback_query_handler(lambda c: c.data.startswith('metal'))
-async def metal_handler(callback_query: CallbackQuery):
-    user_id = callback_query.from_user.id
-    metal_type = "Проволока" if callback_query.data == "metal_provoloka" else "Металлопрокат"
-    user_data[user_id]['cargo'] = metal_type
-    await choose_sender(user_id)
+    query.edit_message_text("Напишите, вставьте или перешлите текст публикации:", reply_markup=skip_or_insert_text())
 
-# Шаг 4: Выбор отправителя
-async def choose_sender(user_id):
-    sender_options = [
-        "Кривой Рог Цемент", "СпецКарьер", "Смарт Гранит",
-        "Баловские Пески", "Любимовский Карьер", "ТОВ МКК №3", "Новатор"
+# Кнопки для вставки текста или пропуска
+def skip_or_insert_text():
+    keyboard = [
+        [InlineKeyboardButton("Пропустить", callback_data='skip_text')]
     ]
-    keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.add(*(InlineKeyboardButton(sender, callback_data=f"sender_{sender}") for sender in sender_options))
+    return InlineKeyboardMarkup(keyboard)
 
-    await send_message_with_keyboard(user_id, "Выберите отправителя:", keyboard)
+# Обработка текста или пропуска
+def handle_text(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
 
-@dp.callback_query_handler(lambda c: c.data.startswith('sender'))
-async def sender_handler(callback_query: CallbackQuery):
-    user_id = callback_query.from_user.id
-    sender = callback_query.data.split('_')[1]
-    user_data[user_id]['sender'] = sender
+    if query.data == 'skip_text':
+        user_data[query.from_user.id]['text'] = None
+    else:
+        user_data[query.from_user.id]['text'] = update.message.text
 
-    transport = user_data[user_id].get('transport', '')
+    # Отправляем на подтверждение
+    send_confirmation(update, context)
 
-    if transport == "🚛Автомобилем":
-        keyboard = InlineKeyboardMarkup(row_width=3).add(
-            *(InlineKeyboardButton(str(i), callback_data=f"quantity_{i}") for i in range(1, 6))
-        )
-        await send_message_with_keyboard(user_id, "Укажите количество машин (или введите текстом):", keyboard)
-        await OrderState.choosing_quantity.set()
-    elif transport == "🚂Вагонами":
-        keyboard = InlineKeyboardMarkup(row_width=2).add(
-            InlineKeyboardButton("🟢Разгружено", callback_data="status_unloaded"),
-            InlineKeyboardButton("🟡Не разгружено", callback_data="status_not_unloaded"),
-            InlineKeyboardButton("🟠Не указано", callback_data="status_not_specified")
-        )
-        await send_message_with_keyboard(user_id, "Укажите статус:", keyboard)
-        await OrderState.choosing_status.set()
+# Отправка на подтверждение
+def send_confirmation(update: Update, context: CallbackContext):
+    user_id = update.callback_query.from_user.id
+    post_data = user_data[user_id]
 
-# Шаг 5: Указание количества машин
-@dp.callback_query_handler(lambda c: c.data.startswith('quantity'), state=OrderState.choosing_quantity)
-async def quantity_handler(callback_query: CallbackQuery, state: FSMContext):
-    user_id = callback_query.from_user.id
-    quantity = callback_query.data.split('_')[1]
-    user_data[user_id]['quantity'] = quantity
-    await state.finish()  # Завершаем состояние
-    await confirm_order(user_id)
+    text = post_data.get('text', 'Нет текста')
+    image = post_data.get('image', None)
 
-# Шаг 5: Указание статуса для вагонов
-@dp.callback_query_handler(lambda c: c.data.startswith('status'), state=OrderState.choosing_status)
-async def status_handler(callback_query: CallbackQuery, state: FSMContext):
-    user_id = callback_query.from_user.id
-    status_map = {
-        "status_unloaded": "🟢Разгружено",
-        "status_not_unloaded": "🟡Не разгружено",
-        "status_not_specified": "🟠Не указано"
-    }
-    status = status_map[callback_query.data]
-    user_data[user_id]['status'] = status
-    await state.finish()  # Завершаем состояние
-    await confirm_order(user_id)
+    # Формируем сообщение для подтверждения
+    message = f"Публикация:\nТекст: {text}"
 
-# Шаг 6: Подтверждение данных
-async def confirm_order(user_id):
-    data = user_data.get(user_id, {})
-    if not data:
-        await bot.send_message(user_id, "Ошибка: данные не найдены.")
-        return
+    if image:
+        message += "\n(с изображением)"
 
-    message = (
-        f"Подтвердите данные:\n"
-        f"Транспортировка: {data.get('transport', 'Не указано')}\n"
-        f"Груз: {data.get('cargo', 'Не указано')}\n"
-        f"Отправитель: {data.get('sender', 'Не указано')}\n"
+    keyboard = [
+        [InlineKeyboardButton("Отправить", callback_data='send_post')],
+        [InlineKeyboardButton("Отменить", callback_data='cancel_post')]
+    ]
+
+    update.callback_query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+
+# Отправка публикации в канал
+def send_post(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+
+    user_id = query.from_user.id
+    post_data = user_data[user_id]
+
+    text = post_data.get('text', 'Нет текста')
+    image = post_data.get('image', None)
+
+    # Отправка публикации в канал
+    if image:
+        context.bot.send_photo(chat_id='@precoinmarket_channel', photo=image, caption=text + '\n\n' + additional_text)
+    else:
+        context.bot.send_message(chat_id='@precoinmarket_channel', text=text + '\n\n' + additional_text)
+
+    query.edit_message_text("Публикация успешно отправлена!")
+
+    # Возвращаем в начало
+    query.message.reply_text("Привет! Выберите тип публикации:", reply_markup=main_menu())
+
+# Отмена публикации
+def cancel_post(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+
+    query.edit_message_text("Публикация отменена!")
+    query.message.reply_text("Привет! Выберите тип публикации:", reply_markup=main_menu())
+
+# Функция ошибки
+def error(update: Update, context: CallbackContext):
+    logger.warning(f"Update {update} caused error {context.error}")
+
+# Основная функция
+def main():
+    # Замените 'YOUR_TOKEN' на токен вашего бота
+    updater = Updater("7728310907:AAFNSOGBWupK6RCXuf0YRA26ex69hTycS5I", use_context=True)
+
+    dp = updater.dispatcher
+
+    # Регистрируем обработчики
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            CHOOSE_ACTION: [CallbackQueryHandler(choose_action, pattern='^create_post$')],
+            ADD_IMAGE: [MessageHandler(Filters.photo, handle_image), CallbackQueryHandler(handle_image, pattern='^skip_image$')],
+            ADD_TEXT: [MessageHandler(Filters.text & ~Filters.command, handle_text), CallbackQueryHandler(handle_text, pattern='^skip_text$')],
+            CONFIRM: [CallbackQueryHandler(send_post, pattern='^send_post$'), CallbackQueryHandler(cancel_post, pattern='^cancel_post$')]
+        },
+        fallbacks=[CommandHandler('start', start)],
     )
-    if data.get('transport') == "🚛Автомобилем":
-        message += f"Количество машин: {data.get('quantity', 'Не указано')}\n"
-    elif data.get('transport') == "🚂Вагонами":
-        message += f"Статус: {data.get('status', 'Не указано')}\n"
 
-    keyboard = InlineKeyboardMarkup(row_width=2).add(
-        InlineKeyboardButton("Подтвердить", callback_data="confirm"),
-        InlineKeyboardButton("Отмена", callback_data="cancel")
-    )
-    await send_message_with_keyboard(user_id, message, keyboard)
+    dp.add_handler(conv_handler)
+    dp.add_error_handler(error)
 
-# Подтверждение или отмена
-@dp.callback_query_handler(lambda c: c.data == "confirm")
-async def confirm_handler(callback_query: CallbackQuery):
-    user_id = callback_query.from_user.id
-    data = user_data.pop(user_id, {})  # Удаляем данные после отправки
-    if not data:
-        await callback_query.answer("Ошибка: данные не найдены.")
-        return
-
-    message = (
-        f"🚛Новое поступление🔔\n"
-        f"_______\n"
-        f"Транспортировка: {data.get('transport', 'Не указано')}\n"
-        f"Груз: {data.get('cargo', 'Не указано')}\n"
-        f"Отправитель: {data.get('sender', 'Не указано')}\n"
-    )
-    if data.get('transport') == "🚛Автомобилем":
-        message += f"Количество машин: {data.get('quantity', 'Не указано')}\n"
-    elif data.get('transport') == "🚂Вагонами":
-        message += f"Статус: {data.get('status', 'Не указано')}\n"
-
-    await bot.send_message(CHANNEL_ID, message)
-    await callback_query.answer("Данные отправлены в канал!")
-    await start_handler(callback_query.message)  # Перезапуск сценария
-
-@dp.callback_query_handler(lambda c: c.data == "cancel")
-async def cancel_handler(callback_query: CallbackQuery):
-    await callback_query.answer("Операция отменена.")
-    await start_handler(callback_query.message)  # Перезапуск сценария
+    # Запускаем бота
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True)
+    main()
