@@ -85,6 +85,15 @@ async def cancel(update: Update, context: CallbackContext):
     await update.callback_query.edit_message_text("Публикация отменена.")
     return ConversationHandler.END
 
+async def confirm_button(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == 'send':
+        await send_post(update, context)
+    elif query.data == 'cancel':
+        await cancel(update, context)
+
 def main():
     application = Application.builder().token("7728310907:AAFNSOGBWupK6RCXuf0YRA26ex69hTycS5I").build()
 
@@ -95,8 +104,8 @@ def main():
             CHOOSING: [CallbackQueryHandler(choose_option)],
             PHOTO: [MessageHandler(filters.PHOTO, photo), MessageHandler(filters.TEXT, photo)],  # Обрабатываем фото и текст
             TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, text)],
-            CONFIRM: [CallbackQueryHandler(send_post, pattern='send'),
-                      CallbackQueryHandler(cancel, pattern='cancel')],
+            CONFIRM: [CallbackQueryHandler(confirm_button, pattern='send'),
+                      CallbackQueryHandler(confirm_button, pattern='cancel')],
         },
         fallbacks=[],
     )
